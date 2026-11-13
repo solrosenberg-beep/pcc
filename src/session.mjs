@@ -5,9 +5,12 @@
 
 let runtime = null; // { cookie, base }
 
+// After login, PCC runs on a numbered org host (e.g. www28). Default to that; override per org.
+const DEFAULT_BASE = process.env.PCC_BASE_URL || "https://www28.pointclickcare.com";
+
 export function setRuntimeCredentials({ cookie, base } = {}) {
   if (!cookie) throw new Error("A PointClickCare session cookie is required.");
-  runtime = { cookie: cookie.trim(), base: base || process.env.PCC_BASE_URL || "https://login.pointclickcare.com" };
+  runtime = { cookie: cookie.trim(), base: (base || DEFAULT_BASE).replace(/\/$/, "") };
 }
 
 export function hasRuntimeCredentials() {
@@ -17,7 +20,7 @@ export function hasRuntimeCredentials() {
 export function getSession() {
   if (runtime && runtime.cookie) return runtime;
   const envCookie = process.env.PCC_COOKIE;
-  if (envCookie) return { cookie: envCookie.trim(), base: process.env.PCC_BASE_URL || "https://login.pointclickcare.com" };
+  if (envCookie) return { cookie: envCookie.trim(), base: DEFAULT_BASE };
   throw new Error("Not connected. Paste your PointClickCare session first.");
 }
 

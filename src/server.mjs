@@ -22,7 +22,8 @@ app.post("/connect", async (req, res) => {
   try {
     const cookie = normalizeCookie(req.body?.cookie);
     if (!cookie) return res.status(400).json({ ok: false, error: "Paste your PointClickCare session cookie." });
-    setRuntimeCredentials({ cookie });
+    const base = (req.body?.base || "").trim() || undefined;
+    setRuntimeCredentials({ cookie, base });
     const v = await validateSession();
     res.json({ ok: true, who: v.who });
   } catch (e) {

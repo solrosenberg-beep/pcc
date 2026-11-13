@@ -1,67 +1,104 @@
-// Read-only client for a logged-in PointClickCare session — CLAIMS only.
+// Read-only client for a logged-in PointClickCare session — CLAIMS (UB-04 batches).
 //
-// IMPORTANT: PCC's internal endpoints are not public and differ by module/version.
-// Unlike Stampli (clean JSON-RPC), PCC is JSF/PrimeFaces: claim/billing data usually
-// comes back as server-rendered HTML pages, PrimeFaces partial-AJAX responses, or a
-// report/export URL (CSV/Excel). The exact URLs + parameters must be MAPPED FROM A REAL
-// NETWORK CAPTURE (HAR) of a logged-in PCC session. The functions below are the shape of
-// the client; the marked spots get filled in once we have that capture.
+// Mapped from a real network capture: PCC serves the claims list as server-rendered HTML
+// at /admin/billing/ub04batchlist.jsp on the org's app host (e.g. www28.pointclickcare.com).
+// Each row is one UB-04 claim batch: number, date, description, payer (submitter profile),
+// status, claim count, and batch total, plus an ESOLbatchId for drill-down into the
+// individual claims (ub04batchinvoices.jsp — wired once that page is captured).
 
 import { getSession, clearSession } from "./session.mjs";
 
 export class PccError extends Error {
-  constructor(message, { status, url, body } = {}) {
+  constructor(message, { status, url } = {}) {
     super(message);
     this.status = status;
     this.url = url;
-    this.body = body;
   }
 }
 
-// Authenticated GET against PCC using the pasted session cookie.
-export async function pccGet(path, { headers = {} } = {}) {
+function clean(s) {
+  return s.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&")
+    .replace(/&#?\w+;/g, " ").replace(/\s+/g, " ").trim();
+}
+function money(s) { const n = parseFloat(String(s).replace(/[^0-9.\-]/g, "")); return isNaN(n) ? 0 : n; }
+
+// Parse one ub04batchlist.jsp page into claim-batch rows.
+export function parseBatches(html) {
+  const out = [];
+  const trRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+  let m;
+  while ((m = trRe.exec(html))) {
+    const tr = m[1];
+    const idM = tr.match(/ESOLbatchId=(\d+)/i);
+    if (!idM) continue;
+    const cells = [...tr.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map((c) => clean(c[1]));
+    if (cells.length < 10) continue;
+    out.push({
+      batchId: idM[1],
+      number: cells[1],
+      date: cells[3],
+      description: cells[4],
+      payer: cells[5],
+      revisedBy: cells[6],
+      status: cells[7] || "Open",
+      claims: parseInt(cells[8], 10) || 0,
+      amount: money(cells[9]),
+    });
+  }
+  const seen = new Set();
+  return out.filter((r) => (seen.has(r.batchId) ? false : seen.add(r.batchId)));
+}
+
+// Authenticated GET using the pasted session cookie.
+async function pccGet(path) {
   const { cookie, base } = getSession();
   const url = path.startsWith("http") ? path : base.replace(/\/$/, "") + path;
   const res = await fetch(url, {
     method: "GET",
     redirect: "manual",
     headers: {
-      accept: "text/html,application/xhtml+xml,application/json,*/*",
+      accept: "text/html,application/xhtml+xml,*/*",
       "user-agent": "Mozilla/5.0 (pcc-console)",
       cookie,
-      ...headers,
     },
   });
-  // PCC bounces unauthenticated requests to the login page (302 or a login form in the body).
   if (res.status === 302 || res.status === 401 || res.status === 403) {
     clearSession();
     throw new PccError(`PointClickCare session is not valid or has expired (HTTP ${res.status}).`, { status: res.status, url });
   }
   const text = await res.text();
-  if (/userLogin\.xhtml|name=["']loginForm["']/i.test(text)) {
+  if (/userLogin\.xhtml|name=["']loginForm["']|please log in/i.test(text)) {
     clearSession();
-    throw new PccError("PointClickCare returned the login page — the session is not valid.", { status: res.status, url });
+    throw new PccError("PointClickCare returned the login page — the session is not valid.", { status: 401, url });
   }
-  return { status: res.status, text, url };
+  return text;
 }
 
-// Validate the pasted session by hitting an authenticated landing page.
-// TODO(capture): replace with the real post-login landing URL from the HAR.
+// Confirm the pasted session works by loading the (authenticated) claims list page.
 export async function validateSession() {
-  const { text } = await pccGet(process.env.PCC_HOME_PATH || "/home/userLogin.xhtml");
-  // A valid session should NOT show the login form (handled in pccGet). Pull a display name if present.
-  const m = text.match(/<[^>]*class=["'][^"']*user[^"']*["'][^>]*>([^<]{2,60})</i);
-  return { ok: true, who: m ? m[1].trim() : null };
+  await pccGet("/admin/billing/ub04batchlist.jsp?ESOLrow=1&ESOLview=default&ESOLstatus=O&ESOLsubmitterfilterid=-1");
+  return { ok: true, who: null };
 }
 
-// Pull the claims list.
-// TODO(capture): wire to the real PCC claims/AR endpoint (likely a billing report or
-// a PrimeFaces data-table partial). Parse rows into the normalized shape below.
-export async function getClaims() {
-  // Placeholder until the capture is in. Normalized row shape the console expects:
-  //   { id, resident, payer, dos, amount, status }
-  throw new PccError(
-    "Claims endpoint not wired yet — send a HAR capture of the PCC billing/claims screen so the real URL can be mapped.",
-    { status: 501 }
-  );
+// Pull all claim batches for the given statuses, following pagination (20 rows/page).
+export async function getClaims({ statuses, maxPages = 50 } = {}) {
+  const list = statuses?.length ? statuses : (process.env.PCC_STATUSES || "O").split(",").map((s) => s.trim());
+  const all = [];
+  for (const status of list) {
+    for (let page = 0; page < maxPages; page++) {
+      const row = 1 + page * 20;
+      const html = await pccGet(`/admin/billing/ub04batchlist.jsp?ESOLrow=${row}&ESOLview=default&ESOLstatus=${encodeURIComponent(status)}&ESOLsubmitterfilterid=-1`);
+      const batches = parseBatches(html);
+      all.push(...batches);
+      if (batches.length < 20) break; // last page
+    }
+  }
+  // De-dup across pages/statuses and shape for the console.
+  const seen = new Set();
+  return all
+    .filter((b) => (seen.has(b.batchId) ? false : seen.add(b.batchId)))
+    .map((b) => ({
+      id: b.number, batchId: b.batchId, description: b.description, payer: b.payer,
+      dos: b.date, claims: b.claims, amount: b.amount, status: b.status, revisedBy: b.revisedBy,
+    }));
 }

@@ -83,6 +83,10 @@
     <h1>Connect to PointClickCare</h1>
     <p>Paste your logged-in PointClickCare session to load your claims. Read-only.</p>
     <div class="field">
+      <label>PCC app host</label>
+      <input id="cBase" type="text" autocomplete="off" value="https://www28.pointclickcare.com" style="width:100%;font:inherit;font-family:var(--mono);font-size:12px;padding:10px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)">
+    </div>
+    <div class="field">
       <label>Session cookie</label>
       <textarea id="cCookie" autocomplete="off" placeholder="Paste the full Cookie header from a logged-in PCC tab (e.g. JSESSIONID=...; ...)"></textarea>
     </div>
@@ -100,14 +104,14 @@
   </div>
   <div class="tiles" id="tiles"></div>
   <div class="toolbar">
-    <input type="search" id="search" placeholder="Search claim, resident or payer" />
+    <input type="search" id="search" placeholder="Search batch, description or payer" />
     <select id="statusFilter"><option value="">All statuses</option></select>
     <button id="reloadBtn">Reload</button>
     <button id="disconnectBtn">Disconnect</button>
   </div>
   <div class="tablewrap">
     <table>
-      <thead><tr><th>Claim</th><th>Resident</th><th>Payer</th><th>DOS</th><th class="num">Amount</th><th>Status</th></tr></thead>
+      <thead><tr><th>Batch #</th><th>Description</th><th>Payer</th><th>Date</th><th class="num">Claims</th><th class="num">Amount</th><th>Status</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
   </div>
@@ -119,10 +123,11 @@
   let claims=[]; const ui={search:"",filter:""};
   const statusClass=(s)=>{const t=String(s||"").toLowerCase();if(/paid|accepted$/.test(t))return"ok";if(/cancel|reject|denied/.test(t))return"bad";return"warn"};
 
+  const esc=(s)=>String(s??"").replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
   function renderTiles(){
-    const open=claims.filter(c=>!/paid|reject|denied/i.test(c.status||""));
-    const t=[["Claims",claims.length],["Total billed",money(claims.reduce((s,c)=>s+(+c.amount||0),0))],
-      ["Paid",money(claims.filter(c=>/paid/i.test(c.status||"")).reduce((s,c)=>s+(+c.amount||0),0))],
+    const open=claims.filter(c=>!/paid|reject|denied|closed/i.test(c.status||""));
+    const t=[["Batches",claims.length],["Claims",claims.reduce((s,c)=>s+(+c.claims||0),0)],
+      ["Total",money(claims.reduce((s,c)=>s+(+c.amount||0),0))],
       ["Open",money(open.reduce((s,c)=>s+(+c.amount||0),0))]];
     $("#tiles").innerHTML=t.map(([l,n])=>`<div class="tile"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
   }
@@ -130,14 +135,14 @@
     const q=ui.search.toLowerCase();
     const list=claims.filter(c=>{
       if(ui.filter&&!String(c.status||"").toLowerCase().includes(ui.filter.toLowerCase()))return false;
-      if(!q)return true;return `${c.id} ${c.resident} ${c.payer}`.toLowerCase().includes(q);
+      if(!q)return true;return `${c.id} ${c.description} ${c.payer}`.toLowerCase().includes(q);
     });
     const el=$("#rows");
-    if(!list.length){el.innerHTML=`<tr><td colspan="6"><div class="empty">No claims to show.</div></td></tr>`;return}
+    if(!list.length){el.innerHTML=`<tr><td colspan="7"><div class="empty">No claim batches to show.</div></td></tr>`;return}
     el.innerHTML=list.map(c=>`<tr>
-      <td class="cno">${c.id??""}</td><td>${c.resident??""}</td><td>${c.payer??""}</td>
-      <td>${c.dos??""}</td><td class="num">${money(c.amount)}</td>
-      <td><span class="pill ${statusClass(c.status)}">${c.status??""}</span></td></tr>`).join("");
+      <td class="cno">${esc(c.id)}</td><td>${esc(c.description)}</td><td>${esc(c.payer)}</td>
+      <td>${esc(c.dos)}</td><td class="num">${esc(c.claims)}</td><td class="num">${money(c.amount)}</td>
+      <td><span class="pill ${statusClass(c.status)}">${esc(c.status)}</span></td></tr>`).join("");
   }
   function renderStatusFilter(){
     const set=[...new Set(claims.map(c=>c.status).filter(Boolean))];
@@ -152,9 +157,9 @@
   const showGate=(m,k)=>{$("#dash").hidden=true;$("#gate").hidden=false;$("#whoName").hidden=true;if(m)gmsg(m,k);else gmsg("")};
   const showDash=()=>{$("#gate").hidden=true;$("#dash").hidden=false};
 
-  const LS="pcc_cookie";
-  const saveCookie=(v)=>{try{localStorage.setItem(LS,v)}catch(e){}};
-  const prefill=()=>{try{$("#cCookie").value=localStorage.getItem(LS)||""}catch(e){}};
+  const LS="pcc_cookie", LSB="pcc_base";
+  const saveCookie=(v,b)=>{try{localStorage.setItem(LS,v);localStorage.setItem(LSB,b)}catch(e){}};
+  const prefill=()=>{try{$("#cCookie").value=localStorage.getItem(LS)||"";const b=localStorage.getItem(LSB);if(b)$("#cBase").value=b}catch(e){}};
 
   async function loadClaims(){
     showDash();badge("Loading claims…");
@@ -167,12 +172,13 @@
 
   async function doConnect(){
     const cookie=$("#cCookie").value.trim();
+    const base=$("#cBase").value.trim();
     if(!cookie){gmsg("Paste your PointClickCare session cookie.","bad");return}
     gmsg("Connecting…","info");$("#cGo").disabled=true;
     try{
-      const r=await fetch("/connect",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({cookie})});
+      const r=await fetch("/connect",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({cookie,base})});
       const j=await r.json();
-      if(j.ok){saveCookie(cookie);if(j.who){$("#whoName").textContent=j.who;$("#whoName").hidden=false}gmsg("");loadClaims()}
+      if(j.ok){saveCookie(cookie,base);if(j.who){$("#whoName").textContent=j.who;$("#whoName").hidden=false}gmsg("");loadClaims()}
       else gmsg(j.error||"Could not connect — check the cookie and try again.","bad");
     }catch(e){gmsg("No API server reachable. This connects only when the app runs (npm start).","bad")}
     finally{$("#cGo").disabled=false}
