@@ -133,8 +133,11 @@ export async function getAllClaims(opts = {}) {
 }
 
 // Pull all claim batches for the given statuses, following pagination (20 rows/page).
-export async function getClaims({ statuses, maxPages = 50 } = {}) {
-  const list = statuses?.length ? statuses : (process.env.PCC_STATUSES || "O").split(",").map((s) => s.trim());
+// PCC status codes: "" = All, O = Open, E = Exported, A = Accepted, N = Do Not Submit.
+// Default is "" (All) so every batch shows, not just Open.
+export async function getClaims({ statuses, maxPages = 100 } = {}) {
+  const raw = statuses?.length != null ? statuses : (process.env.PCC_STATUSES ?? "");
+  const list = Array.isArray(raw) ? raw : String(raw).split(",").map((s) => s.trim());
   const all = [];
   for (const status of list) {
     for (let page = 0; page < maxPages; page++) {
