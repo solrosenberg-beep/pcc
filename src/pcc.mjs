@@ -135,17 +135,25 @@ export async function getAllClaims(opts = {}) {
 // Pull all claim batches for the given statuses, following pagination (20 rows/page).
 // PCC status codes: "" = All, O = Open, E = Exported, A = Accepted, N = Do Not Submit.
 // Default is "" (All) so every batch shows, not just Open.
-export async function getClaims({ statuses, maxPages = 100 } = {}) {
+export async function getClaims({ statuses, maxPages = 4000, concurrency = 6 } = {}) {
   const raw = statuses?.length != null ? statuses : (process.env.PCC_STATUSES ?? "");
   const list = Array.isArray(raw) ? raw : String(raw).split(",").map((s) => s.trim());
+  const pageUrl = (status, row) => `/admin/billing/ub04batchlist.jsp?ESOLrow=${row}&ESOLview=default&ESOLstatus=${encodeURIComponent(status)}&ESOLsubmitterfilterid=-1`;
   const all = [];
   for (const status of list) {
-    for (let page = 0; page < maxPages; page++) {
-      const row = 1 + page * 20;
-      const html = await pccGet(`/admin/billing/ub04batchlist.jsp?ESOLrow=${row}&ESOLview=default&ESOLstatus=${encodeURIComponent(status)}&ESOLsubmitterfilterid=-1`);
-      const batches = parseBatches(html);
-      all.push(...batches);
-      if (batches.length < 20) break; // last page
+    // Fetch pages in concurrent waves until a page comes back short (= the end).
+    let page = 0, done = false;
+    while (!done && page < maxPages) {
+      const wave = [];
+      for (let k = 0; k < concurrency && page < maxPages; k++, page++) {
+        wave.push(pccGet(pageUrl(status, 1 + page * 20)).then(parseBatches).catch(() => null));
+      }
+      const results = await Promise.all(wave);
+      for (const batches of results) {
+        if (batches == null) continue;      // a failed page — keep going
+        all.push(...batches);
+        if (batches.length < 20) done = true; // reached the last page
+      }
     }
   }
   // De-dup across pages/statuses and shape for the console.
