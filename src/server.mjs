@@ -35,9 +35,11 @@ app.post("/connect", async (req, res) => {
 app.post("/disconnect", (_req, res) => { clearSession(); res.json({ ok: true }); });
 app.get("/status", (_req, res) => res.json({ connected: hasRuntimeCredentials() }));
 
-app.get("/claims", async (_req, res) => {
+// status query: "O" Open (default, fast), "" All, "E" Exported, "A" Accepted, "N" Do Not Submit.
+app.get("/claims", async (req, res) => {
   try {
-    const claims = await getClaims();
+    const status = req.query.status ?? "O";
+    const claims = await getClaims({ statuses: [status] });
     res.json({ ok: true, claims });
   } catch (e) {
     res.status(e instanceof PccError && e.status ? e.status : 502).json({ ok: false, error: e.message });
@@ -55,9 +57,10 @@ app.get("/invoices/:batchId", async (req, res) => {
 });
 
 // Every individual claim across all batches, flattened.
-app.get("/all-claims", async (_req, res) => {
+app.get("/all-claims", async (req, res) => {
   try {
-    const claims = await getAllClaims();
+    const status = req.query.status ?? "O";
+    const claims = await getAllClaims({ statuses: [status] });
     res.json({ ok: true, claims });
   } catch (e) {
     res.status(e instanceof PccError && e.status ? e.status : 502).json({ ok: false, error: e.message });

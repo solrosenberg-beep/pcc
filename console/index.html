@@ -155,7 +155,13 @@
   </div>
   <div class="toolbar">
     <input type="search" id="search" placeholder="Search…" />
-    <select id="statusFilter"><option value="">All statuses</option></select>
+    <select id="statusFilter" title="Which PCC batch status to load">
+      <option value="O">Open</option>
+      <option value="">All statuses (slower)</option>
+      <option value="E">Exported</option>
+      <option value="A">Accepted</option>
+      <option value="N">Do Not Submit</option>
+    </select>
     <button id="reloadBtn">Reload</button>
     <button class="accent" id="uploadBtn">Upload 837</button>
     <input type="file" id="file837" accept=".837,.txt,.edi,.dat,text/plain" hidden />
@@ -194,7 +200,8 @@
 <script>
   const $=(s)=>document.querySelector(s);
   const money=(n)=>(Number(n)||0).toLocaleString(undefined,{style:"currency",currency:"USD"});
-  let claims=[]; const ui={search:"",filter:"",view:"batches"};
+  let claims=[]; const ui={search:"",statusCode:"O",view:"batches"};
+  const statusLabel=(c)=>({ "O":"Open","":"all statuses","E":"Exported","A":"Accepted","N":"Do Not Submit" }[c]??"Open");
   const statusClass=(s)=>{const t=String(s||"").toLowerCase();if(/paid|accepted$/.test(t))return"ok";if(/cancel|reject|denied/.test(t))return"bad";return"warn"};
 
   const esc=(s)=>String(s??"").replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -207,10 +214,7 @@
   }
   function renderRows(){
     const q=ui.search.toLowerCase();
-    const list=claims.filter(c=>{
-      if(ui.filter&&!String(c.status||"").toLowerCase().includes(ui.filter.toLowerCase()))return false;
-      if(!q)return true;return `${c.id} ${c.description} ${c.payer}`.toLowerCase().includes(q);
-    });
+    const list=claims.filter(c=>!q||`${c.id} ${c.description} ${c.payer}`.toLowerCase().includes(q));
     const el=$("#rows");
     if(!list.length){el.innerHTML=`<tr><td colspan="7"><div class="empty">No claim batches to show.</div></td></tr>`;return}
     el.innerHTML=list.map(c=>`<tr data-batch="${esc(c.batchId)}" data-desc="${esc(c.description)}" data-payer="${esc(c.payer)}">
@@ -234,7 +238,7 @@
   }
   async function loadAllClaims(){
     allClaims=null;renderAll();
-    try{const r=await fetch("/all-claims");const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Could not load claims");allClaims=j.claims||[];renderAll();}
+    try{const r=await fetch("/all-claims?status="+encodeURIComponent(ui.statusCode));const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Could not load claims");allClaims=j.claims||[];renderAll();}
     catch(e){allClaims=[];$("#allRows").innerHTML=`<tr><td colspan="7"><div class="empty">Could not load claims — ${esc(e.message)}</div></td></tr>`;}
   }
   function switchView(v){
@@ -303,11 +307,7 @@
     catch(err){ showUpload(f.name,[]); }
     e.target.value="";
   });
-  function renderStatusFilter(){
-    const set=[...new Set(claims.map(c=>c.status).filter(Boolean))];
-    $("#statusFilter").innerHTML=`<option value="">All statuses</option>`+set.map(s=>`<option>${esc(s)}</option>`).join("");
-  }
-  function render(){renderTiles();renderStatusFilter();renderRows()}
+  function render(){renderTiles();renderRows()}
 
   function badge(text,kind){const b=$("#badge");b.innerHTML=`<span class="d"></span>${text}`;
     b.style.background=kind==="ok"?"var(--ok-bg)":kind==="bad"?"var(--bad-bg)":"var(--accent-soft)";
@@ -321,9 +321,9 @@
   const prefill=()=>{try{$("#cCookie").value=localStorage.getItem(LS)||"";const b=localStorage.getItem(LSB);if(b)$("#cBase").value=b}catch(e){}};
 
   async function loadClaims(){
-    showDash();badge("Loading claims…");
+    showDash();badge(`Loading ${statusLabel(ui.statusCode)}…`);
     try{
-      const r=await fetch("/claims");const j=await r.json();
+      const r=await fetch("/claims?status="+encodeURIComponent(ui.statusCode));const j=await r.json();
       if(!r.ok||!j.ok)throw new Error(j.error||"Could not load claims");
       claims=j.claims||[];badge(`Live — PointClickCare`,"ok");render();
     }catch(e){showGate("Could not load claims — "+e.message,"bad")}
@@ -346,7 +346,7 @@
   $("#cGo").addEventListener("click",doConnect);
   $("#cCookie").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))doConnect()});
   $("#search").addEventListener("input",e=>{ui.search=e.target.value;ui.view==="all"?renderAll():renderRows()});
-  $("#statusFilter").addEventListener("change",e=>{ui.filter=e.target.value;renderRows()});
+  $("#statusFilter").addEventListener("change",e=>{ui.statusCode=e.target.value;allClaims=null;if(ui.view==="all")loadAllClaims();else loadClaims()});
   $("#reloadBtn").addEventListener("click",()=>{if(ui.view==="all")loadAllClaims();else loadClaims()});
   $("#disconnectBtn").addEventListener("click",()=>{fetch("/disconnect",{method:"POST"}).catch(()=>{}).finally(()=>{claims=[];allClaims=null;showGate()})});
   document.querySelectorAll(".vtab").forEach(t=>t.addEventListener("click",()=>switchView(t.dataset.view)));
