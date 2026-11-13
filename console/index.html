@@ -6,99 +6,130 @@
 <link rel="icon" href="data:,">
 <title>PCC Claims Console</title>
 <style>
+  /* Matches the Stampli console (Zunta look): orange accent, clean white, traffic-light pills. */
   :root {
-    --bg:#f4f6fa; --surface:#fff; --surface-2:#eef1f7; --ink:#1b2130; --muted:#71798c; --line:#e5e8f0;
-    --accent:#0b7bd4; --accent-soft:#e4f1fc; --accent-ink:#fff;
-    --ok:#0f8a44; --ok-bg:#d9f2e2; --warn:#8a5a00; --warn-bg:#fbe8c2; --bad:#c0392b; --bad-bg:#fbdcd7;
-    --font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,Menlo,Consolas,monospace;
-    --shadow:0 1px 2px rgba(23,30,48,.05),0 8px 24px rgba(23,30,48,.06);
+    --bg:#f6f7fb; --surface:#ffffff; --surface-2:#f6f7fb; --ink:#1f2533;
+    --muted:#8b93a6; --line:#ebedf3; --line-2:#f1f3f8;
+    --accent:#f5821f; --accent-soft:#fff1e4; --accent-ink:#ffffff;
+    --brand-a:#ff7a3d; --brand-b:#ff466e;
+    --ok:#0f8a44; --ok-bg:#d4f2de; --warn:#8a5a00; --warn-bg:#fbe8c2;
+    --bad:#c0392b; --bad-bg:#fbdcd7; --info:#5b4bd6; --info-bg:#efecfd;
+    --font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+    --shadow:0 1px 2px rgba(23,30,48,.04),0 6px 20px rgba(23,30,48,.05);
+    --drawer:0 10px 40px rgba(23,30,48,.18);
   }
   @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-    --bg:#0f1420;--surface:#171d2b;--surface-2:#1f2635;--ink:#e9ecf4;--muted:#99a1b5;--line:#2a3346;
-    --accent:#4aa8ec;--accent-soft:#102636;--ok:#52c988;--ok-bg:#122a1d;--warn:#e0ad53;--warn-bg:#2f2512;--bad:#f28b82;--bad-bg:#331b19;
-    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.4);color-scheme:dark;}}
+    --bg:#0f1420; --surface:#171d2b; --surface-2:#1c2434; --ink:#e9ecf4;
+    --muted:#929ab2; --line:#272f41; --line-2:#212a3a;
+    --accent:#ff9a45; --accent-soft:#33220f; --accent-ink:#1a0f05;
+    --ok:#52c988; --ok-bg:#122a1d; --warn:#e0ad53; --warn-bg:#2f2512;
+    --bad:#f28b82; --bad-bg:#331b19; --info:#a99bff; --info-bg:#211f3b;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+    --drawer:0 10px 50px rgba(0,0,0,.55); color-scheme:dark;}}
   :root[data-theme="dark"]{
-    --bg:#0f1420;--surface:#171d2b;--surface-2:#1f2635;--ink:#e9ecf4;--muted:#99a1b5;--line:#2a3346;
-    --accent:#4aa8ec;--accent-soft:#102636;--ok:#52c988;--ok-bg:#122a1d;--warn:#e0ad53;--warn-bg:#2f2512;--bad:#f28b82;--bad-bg:#331b19;
-    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.4);color-scheme:dark;}
+    --bg:#0f1420; --surface:#171d2b; --surface-2:#1c2434; --ink:#e9ecf4;
+    --muted:#929ab2; --line:#272f41; --line-2:#212a3a;
+    --accent:#ff9a45; --accent-soft:#33220f; --accent-ink:#1a0f05;
+    --ok:#52c988; --ok-bg:#122a1d; --warn:#e0ad53; --warn-bg:#2f2512;
+    --bad:#f28b82; --bad-bg:#331b19; --info:#a99bff; --info-bg:#211f3b;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+    --drawer:0 10px 50px rgba(0,0,0,.55); color-scheme:dark;}
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.5}
   [hidden]{display:none!important}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.5}
+
   .topbar{background:var(--surface);border-bottom:1px solid var(--line)}
-  .topbar .inner{max-width:1120px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:13px 18px}
-  .brand{font-weight:800;font-size:18px;letter-spacing:-.02em;color:var(--accent)}
-  .ctx{color:var(--muted);font-size:13.5px;border-left:1px solid var(--line);padding-left:14px}
-  .who{margin-left:auto;color:var(--ink);font-size:13.5px;font-weight:500}
-  .wrap{max-width:1120px;margin:0 auto;padding:20px 18px 48px}
+  .topbar .inner{max-width:1160px;margin:0 auto;display:flex;align-items:center;gap:12px;padding:13px 18px}
+  .brand{font-weight:800;font-size:20px;letter-spacing:-0.02em;background:linear-gradient(95deg,var(--brand-a),var(--brand-b));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .brand-badge{font-size:9px;font-weight:700;color:var(--accent);background:var(--accent-soft);padding:2px 5px;border-radius:5px;vertical-align:super;margin-left:2px}
+  .source{font-size:12.5px;font-weight:700;color:var(--accent);background:var(--accent-soft);padding:4px 11px;border-radius:999px}
+  .topbar .ctx{color:var(--muted);font-size:13.5px;border-left:1px solid var(--line);padding-left:12px}
+  .topbar .who{margin-left:auto;color:var(--ink);font-size:13.5px;font-weight:500}
+
+  .wrap{max-width:1160px;margin:0 auto;padding:20px 18px 48px}
   .head{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
-  .head h1{font-size:20px;margin:0}.grow{flex:1}
+  .head h1{font-size:20px;margin:0;letter-spacing:-0.01em}.grow{flex:1}
   .head .sub{color:var(--muted);font-size:13.5px;margin:3px 0 0}
   .badge{display:inline-flex;align-items:center;gap:7px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px}
   .badge .d{width:7px;height:7px;border-radius:50%;background:currentColor}
+
   .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px;margin:16px 0}
   .tile{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 15px;box-shadow:var(--shadow)}
   .tile .n{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums}
   .tile .l{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
-  .toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
-  .toolbar input,.toolbar select{font:inherit;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)}
-  .toolbar input{flex:1;min-width:160px}
-  button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:9px 13px}
-  button:hover{border-color:var(--accent)} button.accent{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
-  button:disabled{opacity:.55;cursor:progress}
-  .tablewrap{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
-  table{width:100%;border-collapse:collapse;font-size:14px}
-  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--surface-2);white-space:nowrap}
-  th{background:var(--surface-2);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
-  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
-  tr:last-child td{border-bottom:none}
-  .cno{font-family:var(--mono);font-weight:600;font-size:13px}
-  .pill{font-size:11.5px;font-weight:700;padding:3px 11px;border-radius:999px;background:var(--surface-2);color:var(--muted)}
-  .pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.warn{background:var(--warn-bg);color:var(--warn)}.pill.bad{background:var(--bad-bg);color:var(--bad)}
-  .empty{color:var(--muted);font-size:13.5px;padding:22px 14px;text-align:center}
-  .vtabs{display:flex;gap:4px;align-items:center;margin:0 0 12px;border-bottom:1px solid var(--line)}
-  .vtab{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:9px 4px;margin-right:16px;cursor:pointer;font-size:14px;border-radius:0}
+
+  .vtabs{display:flex;gap:4px;align-items:center;margin:0 0 14px;border-bottom:1px solid var(--line)}
+  .vtab{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:9px 4px;margin-right:16px;margin-bottom:-1px;cursor:pointer;font-size:14px;border-radius:0}
   .vtab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
   .vhint{margin-left:auto;color:var(--muted);font-size:12px}
+
+  .toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .toolbar input[type=search],.toolbar select{font:inherit;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)}
+  .toolbar input[type=search]{flex:1;min-width:160px}
+  button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:9px 13px}
+  button:hover{border-color:var(--accent)} button:active{transform:translateY(1px)}
+  button.accent{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+  button.accent:hover{filter:brightness(1.04)} button:disabled{opacity:.55;cursor:progress}
+
+  .tablewrap{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line-2);white-space:nowrap}
+  th{background:var(--surface-2);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);position:sticky;top:0}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  tr:last-child td{border-bottom:none}
   tbody tr[data-batch]{cursor:pointer} tbody tr[data-batch]:hover{background:var(--accent-soft)}
+  .cno{font-family:var(--mono);font-weight:600;font-size:13px}
+  .pill{font-size:11.5px;font-weight:700;padding:3px 11px;border-radius:999px;background:var(--surface-2);color:var(--muted);display:inline-block}
+  .pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.warn{background:var(--warn-bg);color:var(--warn)}
+  .pill.bad{background:var(--bad-bg);color:var(--bad)}.pill.info{background:var(--info-bg);color:var(--info)}
+  .empty{color:var(--muted);font-size:13.5px;padding:22px 14px;text-align:center}
+
+  /* drawer */
   .scrim{position:fixed;inset:0;background:rgba(15,20,30,.38);opacity:0;pointer-events:none;transition:opacity .18s;z-index:40}
   .scrim.open{opacity:1;pointer-events:auto}
-  .drawer{position:fixed;top:0;right:0;height:100%;width:min(620px,96vw);background:var(--surface);box-shadow:-10px 0 40px rgba(0,0,0,.2);transform:translateX(100%);transition:transform .2s;z-index:41;display:flex;flex-direction:column}
+  .drawer{position:fixed;top:0;right:0;height:100%;width:min(680px,96vw);background:var(--surface);box-shadow:var(--drawer);transform:translateX(100%);transition:transform .2s ease;z-index:41;display:flex;flex-direction:column}
   .drawer.open{transform:translateX(0)}
-  .dhead{display:flex;align-items:flex-start;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line)}
-  .dhead .x{margin-left:auto;border:none;background:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1}
-  .dhead .meta{color:var(--muted);font-size:13px;margin-top:3px}
-  .dbody{overflow:auto;flex:1;padding:14px 18px}
   @media (prefers-reduced-motion:reduce){.drawer,.scrim{transition:none}}
+  .dhead{display:flex;align-items:flex-start;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line)}
+  .dhead .x{margin-left:auto;border:none;background:transparent;font-size:20px;line-height:1;color:var(--muted);padding:2px 6px;cursor:pointer}
+  .dhead .meta{color:var(--muted);font-size:13px;margin-top:3px}
+  .dbody{overflow:auto;padding:14px 18px 24px;flex:1}
+
   /* login gate */
   .gate{min-height:calc(100vh - 54px);display:flex;align-items:center;justify-content:center;padding:24px 16px}
   .gatecard{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);width:min(460px,100%);padding:30px 28px 26px;text-align:center}
   .gatecard .brand{font-size:24px}
-  .gatecard h1{font-size:19px;margin:10px 0 6px}
-  .gatecard p{color:var(--muted);font-size:14px;margin:0 auto 18px;max-width:340px}
-  .field{text-align:left;margin-bottom:14px}
+  .gatecard h1{font-size:19px;margin:12px 0 6px;letter-spacing:-0.01em}
+  .gatecard>p{color:var(--muted);font-size:14px;margin:0 auto 18px;max-width:340px}
+  .field{text-align:left;margin-bottom:12px}
   .field label{font-size:12.5px;color:var(--muted);display:block;margin-bottom:5px}
-  .field textarea{width:100%;font:inherit;font-family:var(--mono);font-size:12px;padding:10px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);resize:vertical;min-height:70px}
+  .field input,.field textarea{width:100%;font:inherit;font-family:var(--mono);font-size:12px;padding:10px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)}
+  .field textarea{resize:vertical;min-height:72px}
   .gatecard .accent{width:100%;padding:12px;font-size:15px}
   .gmsg{margin:0 0 14px;padding:10px 12px;border-radius:10px;font-size:13px;text-align:left;word-break:break-word}
   .gmsg.bad{background:var(--bad-bg);color:var(--bad)}.gmsg.info{background:var(--surface-2);color:var(--muted)}
   .hint{font-size:12px;color:var(--muted);text-align:left;margin-top:10px}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media (max-width:560px){th.hide,td.hide{display:none}}
 </style>
 </head>
 <body>
 <div class="topbar"><div class="inner">
-  <span class="brand">PCC Claims</span><span class="ctx">Read-only console</span>
+  <span class="brand">zunta<span class="brand-badge">v2 Beta</span></span>
+  <span class="source">PointClickCare</span>
+  <span class="ctx">Claims console</span>
   <span class="who" id="whoName" hidden></span>
 </div></div>
 
 <!-- LOGIN GATE -->
 <div class="gate" id="gate">
   <div class="gatecard">
-    <span class="brand">PCC Claims</span>
+    <span class="brand">zunta<span class="brand-badge">v2 Beta</span></span>
     <h1>Connect to PointClickCare</h1>
     <p>Paste your logged-in PointClickCare session to load your claims. Read-only.</p>
     <div class="field">
       <label>PCC app host</label>
-      <input id="cBase" type="text" autocomplete="off" value="https://www28.pointclickcare.com" style="width:100%;font:inherit;font-family:var(--mono);font-size:12px;padding:10px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)">
+      <input id="cBase" type="text" autocomplete="off" value="https://www28.pointclickcare.com">
     </div>
     <div class="field">
       <label>Session cookie</label>
@@ -130,13 +161,13 @@
   </div>
   <div class="tablewrap" id="panel-batches">
     <table>
-      <thead><tr><th>Batch #</th><th>Description</th><th>Payer</th><th>Date</th><th class="num">Claims</th><th class="num">Amount</th><th>Status</th></tr></thead>
+      <thead><tr><th>Batch #</th><th>Description</th><th>Payer</th><th class="hide">Date</th><th class="num">Claims</th><th class="num">Amount</th><th>Status</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
   </div>
   <div class="tablewrap" id="panel-all" hidden>
     <table>
-      <thead><tr><th>Resident</th><th>Payer</th><th>Batch</th><th>Bill Type</th><th>From</th><th>To</th><th class="num">Amount</th></tr></thead>
+      <thead><tr><th>Resident</th><th>Payer</th><th>Batch</th><th class="hide">Bill Type</th><th class="hide">From</th><th class="hide">To</th><th class="num">Amount</th></tr></thead>
       <tbody id="allRows"></tbody>
     </table>
   </div>
@@ -151,7 +182,7 @@
   <div class="dbody">
     <div class="tablewrap" style="box-shadow:none">
       <table>
-        <thead><tr><th>Resident</th><th>Payer</th><th>Type</th><th>Bill Type</th><th>From</th><th>To</th><th class="num">Amount</th></tr></thead>
+        <thead><tr><th>Resident</th><th>Payer</th><th class="hide">Type</th><th>Bill Type</th><th class="hide">From</th><th class="hide">To</th><th class="num">Amount</th></tr></thead>
         <tbody id="dRows"></tbody>
       </table>
     </div>
@@ -182,7 +213,7 @@
     if(!list.length){el.innerHTML=`<tr><td colspan="7"><div class="empty">No claim batches to show.</div></td></tr>`;return}
     el.innerHTML=list.map(c=>`<tr data-batch="${esc(c.batchId)}" data-desc="${esc(c.description)}" data-payer="${esc(c.payer)}">
       <td class="cno">${esc(c.id)}</td><td>${esc(c.description)}</td><td>${esc(c.payer)}</td>
-      <td>${esc(c.dos)}</td><td class="num">${esc(c.claims)}</td><td class="num">${money(c.amount)}</td>
+      <td class="hide">${esc(c.dos)}</td><td class="num">${esc(c.claims)}</td><td class="num">${money(c.amount)}</td>
       <td><span class="pill ${statusClass(c.status)}">${esc(c.status)}</span></td></tr>`).join("");
     el.querySelectorAll("tr[data-batch]").forEach(tr=>tr.addEventListener("click",()=>openBatch(tr.dataset.batch,tr.dataset.desc,tr.dataset.payer)));
   }
@@ -197,7 +228,7 @@
     if(!list.length){el.innerHTML=`<tr><td colspan="7"><div class="empty">No claims to show.</div></td></tr>`;return}
     el.innerHTML=list.map(c=>`<tr>
       <td>${esc(c.resident)}</td><td>${esc(c.payer)}</td><td class="cno">${esc(c.batch)}</td>
-      <td>${esc(c.billType)}</td><td>${esc(c.from)}</td><td>${esc(c.to)}</td><td class="num">${money(c.amount)}</td></tr>`).join("");
+      <td class="hide">${esc(c.billType)}</td><td class="hide">${esc(c.from)}</td><td class="hide">${esc(c.to)}</td><td class="num">${money(c.amount)}</td></tr>`).join("");
   }
   async function loadAllClaims(){
     allClaims=null;renderAll();
@@ -225,15 +256,15 @@
       if(!r.ok||!j.ok)throw new Error(j.error||"Could not load claims");
       const cl=j.claims||[];
       $("#dRows").innerHTML=cl.length?cl.map(c=>`<tr>
-        <td>${esc(c.resident)}</td><td>${esc(c.payer)}</td><td>${esc(c.type)}</td><td>${esc(c.billType)}</td>
-        <td>${esc(c.from)}</td><td>${esc(c.to)}</td><td class="num">${money(c.amount)}</td></tr>`).join("")
+        <td>${esc(c.resident)}</td><td>${esc(c.payer)}</td><td class="hide">${esc(c.type)}</td><td>${esc(c.billType)}</td>
+        <td class="hide">${esc(c.from)}</td><td class="hide">${esc(c.to)}</td><td class="num">${money(c.amount)}</td></tr>`).join("")
         :`<tr><td colspan="7"><div class="empty">No claims in this batch.</div></td></tr>`;
     }catch(e){$("#dRows").innerHTML=`<tr><td colspan="7"><div class="empty">Could not load claims — ${esc(e.message)}</div></td></tr>`;}
   }
   function closeDrawer(){$("#scrim").classList.remove("open");$("#drawer").classList.remove("open")}
   function renderStatusFilter(){
     const set=[...new Set(claims.map(c=>c.status).filter(Boolean))];
-    $("#statusFilter").innerHTML=`<option value="">All statuses</option>`+set.map(s=>`<option>${s}</option>`).join("");
+    $("#statusFilter").innerHTML=`<option value="">All statuses</option>`+set.map(s=>`<option>${esc(s)}</option>`).join("");
   }
   function render(){renderTiles();renderStatusFilter();renderRows()}
 
@@ -241,7 +272,7 @@
     b.style.background=kind==="ok"?"var(--ok-bg)":kind==="bad"?"var(--bad-bg)":"var(--accent-soft)";
     b.style.color=kind==="ok"?"var(--ok)":kind==="bad"?"var(--bad)":"var(--accent)";}
   function gmsg(t,k){const g=$("#gateMsg");if(!t){g.hidden=true;return}g.hidden=false;g.className="gmsg "+(k||"info");g.textContent=t}
-  const showGate=(m,k)=>{$("#dash").hidden=true;$("#gate").hidden=false;$("#whoName").hidden=true;if(m)gmsg(m,k);else gmsg("")};
+  const showGate=(m,k)=>{$("#dash").hidden=true;$("#gate").hidden=false;$("#whoName").hidden=true;closeDrawer();if(m)gmsg(m,k);else gmsg("")};
   const showDash=()=>{$("#gate").hidden=true;$("#dash").hidden=false};
 
   const LS="pcc_cookie", LSB="pcc_base";
@@ -272,6 +303,7 @@
   }
 
   $("#cGo").addEventListener("click",doConnect);
+  $("#cCookie").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))doConnect()});
   $("#search").addEventListener("input",e=>{ui.search=e.target.value;ui.view==="all"?renderAll():renderRows()});
   $("#statusFilter").addEventListener("change",e=>{ui.filter=e.target.value;renderRows()});
   $("#reloadBtn").addEventListener("click",()=>{if(ui.view==="all")loadAllClaims();else loadClaims()});
