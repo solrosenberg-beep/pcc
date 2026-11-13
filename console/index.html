@@ -156,8 +156,8 @@
   <div class="toolbar">
     <input type="search" id="search" placeholder="Search…" />
     <select id="statusFilter" title="Which PCC batch status to load">
-      <option value="O">Open</option>
-      <option value="">All statuses (slower)</option>
+      <option value="">All statuses</option>
+      <option value="O">Open (faster)</option>
       <option value="E">Exported</option>
       <option value="A">Accepted</option>
       <option value="N">Do Not Submit</option>
@@ -200,7 +200,7 @@
 <script>
   const $=(s)=>document.querySelector(s);
   const money=(n)=>(Number(n)||0).toLocaleString(undefined,{style:"currency",currency:"USD"});
-  let claims=[]; const ui={search:"",statusCode:"O",view:"batches"};
+  let claims=[]; const ui={search:"",statusCode:"",view:"batches"};
   const statusLabel=(c)=>({ "O":"Open","":"all statuses","E":"Exported","A":"Accepted","N":"Do Not Submit" }[c]??"Open");
   const statusClass=(s)=>{const t=String(s||"").toLowerCase();if(/paid|accepted$/.test(t))return"ok";if(/cancel|reject|denied/.test(t))return"bad";return"warn"};
 
