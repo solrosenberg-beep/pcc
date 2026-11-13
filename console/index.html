@@ -157,6 +157,8 @@
     <input type="search" id="search" placeholder="Search…" />
     <select id="statusFilter"><option value="">All statuses</option></select>
     <button id="reloadBtn">Reload</button>
+    <button class="accent" id="uploadBtn">Upload 837</button>
+    <input type="file" id="file837" accept=".837,.txt,.edi,.dat,text/plain" hidden />
     <button id="disconnectBtn">Disconnect</button>
   </div>
   <div class="tablewrap" id="panel-batches">
@@ -262,6 +264,45 @@
     }catch(e){$("#dRows").innerHTML=`<tr><td colspan="7"><div class="empty">Could not load claims — ${esc(e.message)}</div></td></tr>`;}
   }
   function closeDrawer(){$("#scrim").classList.remove("open");$("#drawer").classList.remove("open")}
+
+  // ---- Upload 837 (read-only preview — never submitted to PCC) ----
+  const fmtDate=(d)=>/^\d{8}$/.test(d)?`${+d.slice(4,6)}/${+d.slice(6,8)}/${d.slice(0,4)}`:"";
+  function parse837(text){
+    const segs=text.replace(/\r?\n/g,"").split("~").map(s=>s.trim()).filter(Boolean);
+    const claims=[]; let payer="",patient="";
+    for(const seg of segs){
+      const el=seg.split("*"); const tag=(el[0]||"").toUpperCase();
+      if(tag==="NM1"){
+        const ent=el[1]; const nm=(el[3]||"")+(el[4]?", "+el[4]:"");
+        if(ent==="PR") payer=el[3]||"";
+        if(ent==="IL"||ent==="QC") patient=nm;
+      }
+      if(tag==="CLM"){
+        claims.push({resident:patient,payer,type:"837",billType:el[5]?String(el[5]).split(":")[0]:"",from:"",to:"",amount:parseFloat(el[2])||0,id:el[1]||""});
+      }
+      if(tag==="DTP"&&claims.length){
+        const last=claims[claims.length-1]; const m=String(el[3]||"").match(/(\d{8})(?:-(\d{8}))?/);
+        if(m){last.from=fmtDate(m[1]); if(m[2])last.to=fmtDate(m[2]);}
+      }
+    }
+    return claims;
+  }
+  function showUpload(name,cl){
+    $("#dTitle").textContent="Uploaded 837 — preview";
+    $("#dSub").textContent=`${esc(name)} · ${cl.length} claim${cl.length===1?"":"s"} · not submitted to PCC`;
+    $("#dRows").innerHTML=cl.length?cl.map(c=>`<tr>
+      <td>${esc(c.resident)}</td><td>${esc(c.payer)}</td><td class="hide">${esc(c.type)}</td><td>${esc(c.billType)}</td>
+      <td class="hide">${esc(c.from)}</td><td class="hide">${esc(c.to)}</td><td class="num">${money(c.amount)}</td></tr>`).join("")
+      :`<tr><td colspan="7"><div class="empty">No claims found in this file. Expected an X12 837 with CLM segments.</div></td></tr>`;
+    $("#scrim").classList.add("open");$("#drawer").classList.add("open");
+  }
+  $("#uploadBtn").addEventListener("click",()=>$("#file837").click());
+  $("#file837").addEventListener("change",async(e)=>{
+    const f=e.target.files[0]; if(!f)return;
+    try{ const text=await f.text(); showUpload(f.name,parse837(text)); }
+    catch(err){ showUpload(f.name,[]); }
+    e.target.value="";
+  });
   function renderStatusFilter(){
     const set=[...new Set(claims.map(c=>c.status).filter(Boolean))];
     $("#statusFilter").innerHTML=`<option value="">All statuses</option>`+set.map(s=>`<option>${esc(s)}</option>`).join("");
