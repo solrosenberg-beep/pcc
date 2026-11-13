@@ -55,6 +55,20 @@
   .pill{font-size:11.5px;font-weight:700;padding:3px 11px;border-radius:999px;background:var(--surface-2);color:var(--muted)}
   .pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.warn{background:var(--warn-bg);color:var(--warn)}.pill.bad{background:var(--bad-bg);color:var(--bad)}
   .empty{color:var(--muted);font-size:13.5px;padding:22px 14px;text-align:center}
+  .vtabs{display:flex;gap:4px;align-items:center;margin:0 0 12px;border-bottom:1px solid var(--line)}
+  .vtab{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:9px 4px;margin-right:16px;cursor:pointer;font-size:14px;border-radius:0}
+  .vtab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+  .vhint{margin-left:auto;color:var(--muted);font-size:12px}
+  tbody tr[data-batch]{cursor:pointer} tbody tr[data-batch]:hover{background:var(--accent-soft)}
+  .scrim{position:fixed;inset:0;background:rgba(15,20,30,.38);opacity:0;pointer-events:none;transition:opacity .18s;z-index:40}
+  .scrim.open{opacity:1;pointer-events:auto}
+  .drawer{position:fixed;top:0;right:0;height:100%;width:min(620px,96vw);background:var(--surface);box-shadow:-10px 0 40px rgba(0,0,0,.2);transform:translateX(100%);transition:transform .2s;z-index:41;display:flex;flex-direction:column}
+  .drawer.open{transform:translateX(0)}
+  .dhead{display:flex;align-items:flex-start;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line)}
+  .dhead .x{margin-left:auto;border:none;background:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1}
+  .dhead .meta{color:var(--muted);font-size:13px;margin-top:3px}
+  .dbody{overflow:auto;flex:1;padding:14px 18px}
+  @media (prefers-reduced-motion:reduce){.drawer,.scrim{transition:none}}
   /* login gate */
   .gate{min-height:calc(100vh - 54px);display:flex;align-items:center;justify-content:center;padding:24px 16px}
   .gatecard{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);width:min(460px,100%);padding:30px 28px 26px;text-align:center}
@@ -103,24 +117,51 @@
     <span class="badge" id="badge"><span class="d"></span>Connecting…</span>
   </div>
   <div class="tiles" id="tiles"></div>
+  <div class="vtabs">
+    <button class="vtab on" data-view="batches">Batches</button>
+    <button class="vtab" data-view="all">All claims</button>
+    <span class="vhint" id="vhint">Tip: click a batch to see the claims inside it.</span>
+  </div>
   <div class="toolbar">
-    <input type="search" id="search" placeholder="Search batch, description or payer" />
+    <input type="search" id="search" placeholder="Search…" />
     <select id="statusFilter"><option value="">All statuses</option></select>
     <button id="reloadBtn">Reload</button>
     <button id="disconnectBtn">Disconnect</button>
   </div>
-  <div class="tablewrap">
+  <div class="tablewrap" id="panel-batches">
     <table>
       <thead><tr><th>Batch #</th><th>Description</th><th>Payer</th><th>Date</th><th class="num">Claims</th><th class="num">Amount</th><th>Status</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
   </div>
+  <div class="tablewrap" id="panel-all" hidden>
+    <table>
+      <thead><tr><th>Resident</th><th>Payer</th><th>Batch</th><th>Bill Type</th><th>From</th><th>To</th><th class="num">Amount</th></tr></thead>
+      <tbody id="allRows"></tbody>
+    </table>
+  </div>
 </div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Batch claims">
+  <div class="dhead">
+    <div><div class="cno" id="dTitle"></div><div class="meta" id="dSub"></div></div>
+    <button class="x" id="dClose" aria-label="Close">&times;</button>
+  </div>
+  <div class="dbody">
+    <div class="tablewrap" style="box-shadow:none">
+      <table>
+        <thead><tr><th>Resident</th><th>Payer</th><th>Type</th><th>Bill Type</th><th>From</th><th>To</th><th class="num">Amount</th></tr></thead>
+        <tbody id="dRows"></tbody>
+      </table>
+    </div>
+  </div>
+</aside>
 
 <script>
   const $=(s)=>document.querySelector(s);
   const money=(n)=>(Number(n)||0).toLocaleString(undefined,{style:"currency",currency:"USD"});
-  let claims=[]; const ui={search:"",filter:""};
+  let claims=[]; const ui={search:"",filter:"",view:"batches"};
   const statusClass=(s)=>{const t=String(s||"").toLowerCase();if(/paid|accepted$/.test(t))return"ok";if(/cancel|reject|denied/.test(t))return"bad";return"warn"};
 
   const esc=(s)=>String(s??"").replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -139,11 +180,57 @@
     });
     const el=$("#rows");
     if(!list.length){el.innerHTML=`<tr><td colspan="7"><div class="empty">No claim batches to show.</div></td></tr>`;return}
-    el.innerHTML=list.map(c=>`<tr>
+    el.innerHTML=list.map(c=>`<tr data-batch="${esc(c.batchId)}" data-desc="${esc(c.description)}" data-payer="${esc(c.payer)}">
       <td class="cno">${esc(c.id)}</td><td>${esc(c.description)}</td><td>${esc(c.payer)}</td>
       <td>${esc(c.dos)}</td><td class="num">${esc(c.claims)}</td><td class="num">${money(c.amount)}</td>
       <td><span class="pill ${statusClass(c.status)}">${esc(c.status)}</span></td></tr>`).join("");
+    el.querySelectorAll("tr[data-batch]").forEach(tr=>tr.addEventListener("click",()=>openBatch(tr.dataset.batch,tr.dataset.desc,tr.dataset.payer)));
   }
+
+  // ---- all-claims (flat) view ----
+  let allClaims=null;
+  function renderAll(){
+    const q=ui.search.toLowerCase();
+    const list=(allClaims||[]).filter(c=>!q||`${c.resident} ${c.payer} ${c.batch}`.toLowerCase().includes(q));
+    const el=$("#allRows");
+    if(!allClaims){el.innerHTML=`<tr><td colspan="7"><div class="empty">Loading every claim across all batches…</div></td></tr>`;return}
+    if(!list.length){el.innerHTML=`<tr><td colspan="7"><div class="empty">No claims to show.</div></td></tr>`;return}
+    el.innerHTML=list.map(c=>`<tr>
+      <td>${esc(c.resident)}</td><td>${esc(c.payer)}</td><td class="cno">${esc(c.batch)}</td>
+      <td>${esc(c.billType)}</td><td>${esc(c.from)}</td><td>${esc(c.to)}</td><td class="num">${money(c.amount)}</td></tr>`).join("");
+  }
+  async function loadAllClaims(){
+    allClaims=null;renderAll();
+    try{const r=await fetch("/all-claims");const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Could not load claims");allClaims=j.claims||[];renderAll();}
+    catch(e){allClaims=[];$("#allRows").innerHTML=`<tr><td colspan="7"><div class="empty">Could not load claims — ${esc(e.message)}</div></td></tr>`;}
+  }
+  function switchView(v){
+    ui.view=v;
+    document.querySelectorAll(".vtab").forEach(t=>t.classList.toggle("on",t.dataset.view===v));
+    $("#panel-batches").hidden=v!=="batches";
+    $("#panel-all").hidden=v!=="all";
+    $("#vhint").textContent=v==="all"?"Every individual claim across all batches.":"Tip: click a batch to see the claims inside it.";
+    if(v==="all"&&allClaims===null)loadAllClaims();
+    if(v==="all")renderAll();else renderRows();
+  }
+
+  // ---- batch drill-down drawer ----
+  async function openBatch(batchId,desc,payer){
+    $("#dTitle").textContent="Batch "+batchId;
+    $("#dSub").textContent=[desc,payer].filter(Boolean).join(" · ");
+    $("#dRows").innerHTML=`<tr><td colspan="7"><div class="empty">Loading claims…</div></td></tr>`;
+    $("#scrim").classList.add("open");$("#drawer").classList.add("open");
+    try{
+      const r=await fetch("/invoices/"+encodeURIComponent(batchId));const j=await r.json();
+      if(!r.ok||!j.ok)throw new Error(j.error||"Could not load claims");
+      const cl=j.claims||[];
+      $("#dRows").innerHTML=cl.length?cl.map(c=>`<tr>
+        <td>${esc(c.resident)}</td><td>${esc(c.payer)}</td><td>${esc(c.type)}</td><td>${esc(c.billType)}</td>
+        <td>${esc(c.from)}</td><td>${esc(c.to)}</td><td class="num">${money(c.amount)}</td></tr>`).join("")
+        :`<tr><td colspan="7"><div class="empty">No claims in this batch.</div></td></tr>`;
+    }catch(e){$("#dRows").innerHTML=`<tr><td colspan="7"><div class="empty">Could not load claims — ${esc(e.message)}</div></td></tr>`;}
+  }
+  function closeDrawer(){$("#scrim").classList.remove("open");$("#drawer").classList.remove("open")}
   function renderStatusFilter(){
     const set=[...new Set(claims.map(c=>c.status).filter(Boolean))];
     $("#statusFilter").innerHTML=`<option value="">All statuses</option>`+set.map(s=>`<option>${s}</option>`).join("");
@@ -185,10 +272,14 @@
   }
 
   $("#cGo").addEventListener("click",doConnect);
-  $("#search").addEventListener("input",e=>{ui.search=e.target.value;renderRows()});
+  $("#search").addEventListener("input",e=>{ui.search=e.target.value;ui.view==="all"?renderAll():renderRows()});
   $("#statusFilter").addEventListener("change",e=>{ui.filter=e.target.value;renderRows()});
-  $("#reloadBtn").addEventListener("click",loadClaims);
-  $("#disconnectBtn").addEventListener("click",()=>{fetch("/disconnect",{method:"POST"}).catch(()=>{}).finally(()=>{claims=[];showGate()})});
+  $("#reloadBtn").addEventListener("click",()=>{if(ui.view==="all")loadAllClaims();else loadClaims()});
+  $("#disconnectBtn").addEventListener("click",()=>{fetch("/disconnect",{method:"POST"}).catch(()=>{}).finally(()=>{claims=[];allClaims=null;showGate()})});
+  document.querySelectorAll(".vtab").forEach(t=>t.addEventListener("click",()=>switchView(t.dataset.view)));
+  $("#dClose").addEventListener("click",closeDrawer);
+  $("#scrim").addEventListener("click",closeDrawer);
+  document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer()});
 
   async function init(){
     prefill();

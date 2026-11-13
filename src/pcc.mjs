@@ -80,6 +80,48 @@ export async function validateSession() {
   return { ok: true, who: null };
 }
 
+// Parse one ub04batchinvoices.jsp page into individual claim rows.
+export function parseInvoices(html) {
+  const out = [];
+  const trRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+  let m;
+  while ((m = trRe.exec(html))) {
+    const tr = m[1];
+    const idM = tr.match(/ESOLinvoiceid=(\d+)/i) || tr.match(/name=["']ESOLinvoiceid["'][^>]*value=["'](\d+)["']/i);
+    if (!idM) continue;
+    const cells = [...tr.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map((c) => clean(c[1]));
+    if (cells.length < 10) continue;
+    const clientM = tr.match(/ESOLclientid=(\d+)/i);
+    out.push({
+      invoiceId: idM[1], clientId: clientM ? clientM[1] : null,
+      resident: cells[3], payer: cells[4], type: cells[5], billType: cells[6],
+      from: cells[7], to: cells[8], amount: money(cells[9]),
+    });
+  }
+  const seen = new Set();
+  return out.filter((r) => (seen.has(r.invoiceId) ? false : seen.add(r.invoiceId)));
+}
+
+// Individual claims inside one batch.
+export async function getBatchInvoices(batchId) {
+  if (!/^\d+$/.test(String(batchId))) throw new PccError("Invalid batch id.", { status: 400 });
+  const html = await pccGet(`/admin/billing/ub04batchinvoices.jsp?ESOLbatchId=${batchId}`);
+  return parseInvoices(html);
+}
+
+// Every individual claim across all batches, flattened (one row per claim).
+export async function getAllClaims(opts = {}) {
+  const batches = await getClaims(opts);
+  const claims = [];
+  for (const b of batches) {
+    try {
+      const inv = await getBatchInvoices(b.batchId);
+      for (const c of inv) claims.push({ ...c, batch: b.id, batchDescription: b.description, batchStatus: b.status });
+    } catch (e) { /* skip a batch that fails; keep going */ }
+  }
+  return claims;
+}
+
 // Pull all claim batches for the given statuses, following pagination (20 rows/page).
 export async function getClaims({ statuses, maxPages = 50 } = {}) {
   const list = statuses?.length ? statuses : (process.env.PCC_STATUSES || "O").split(",").map((s) => s.trim());

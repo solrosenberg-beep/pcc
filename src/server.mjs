@@ -5,7 +5,7 @@ import express from "express";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { setRuntimeCredentials, clearSession, hasRuntimeCredentials } from "./session.mjs";
-import { validateSession, getClaims, PccError } from "./pcc.mjs";
+import { validateSession, getClaims, getBatchInvoices, getAllClaims, PccError } from "./pcc.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -38,6 +38,26 @@ app.get("/status", (_req, res) => res.json({ connected: hasRuntimeCredentials() 
 app.get("/claims", async (_req, res) => {
   try {
     const claims = await getClaims();
+    res.json({ ok: true, claims });
+  } catch (e) {
+    res.status(e instanceof PccError && e.status ? e.status : 502).json({ ok: false, error: e.message });
+  }
+});
+
+// Individual claims inside one batch (drill-down).
+app.get("/invoices/:batchId", async (req, res) => {
+  try {
+    const claims = await getBatchInvoices(req.params.batchId);
+    res.json({ ok: true, claims });
+  } catch (e) {
+    res.status(e instanceof PccError && e.status ? e.status : 502).json({ ok: false, error: e.message });
+  }
+});
+
+// Every individual claim across all batches, flattened.
+app.get("/all-claims", async (_req, res) => {
+  try {
+    const claims = await getAllClaims();
     res.json({ ok: true, claims });
   } catch (e) {
     res.status(e instanceof PccError && e.status ? e.status : 502).json({ ok: false, error: e.message });
