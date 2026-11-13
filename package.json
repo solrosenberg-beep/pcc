@@ -1,0 +1,13 @@
+{
+  "name": "pcc-console",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Private read-only console over a PointClickCare session.",
+  "scripts": {
+    "start": "node --no-warnings src/server.mjs"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules/
+# Never commit credentials, captures, or any pulled PHI
+.env
+*.har
+data/
+exports/
+*.session
+.pcc-profile/
