@@ -90,6 +90,13 @@ export async function validateSession() {
   return { ok: true, who: null };
 }
 
+// Keep-alive: a cheap authenticated GET that resets PCC's idle timer. Throws on auth failure
+// (so the caller can stop the heartbeat when the session has truly died).
+export async function keepAlivePing() {
+  await pccGet("/admin/billing/ub04batchlist.jsp?ESOLrow=1&ESOLview=default&ESOLstatus=O&ESOLsubmitterfilterid=-1");
+  return true;
+}
+
 // Parse one ub04batchinvoices.jsp page into individual claim rows.
 export function parseInvoices(html) {
   const out = [];

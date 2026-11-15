@@ -5,7 +5,7 @@ import express from "express";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { setRuntimeCredentials, clearSession, hasRuntimeCredentials } from "./session.mjs";
-import { validateSession, getClaims, getBatchInvoices, getAllClaims, PccError } from "./pcc.mjs";
+import { validateSession, getClaims, getBatchInvoices, getAllClaims, keepAlivePing, PccError } from "./pcc.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -18,6 +18,20 @@ function normalizeCookie(raw) {
   return String(raw).replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim().replace(/;$/, "");
 }
 
+// Keep-alive heartbeat: ping PCC on a timer so the session doesn't idle-out while connected.
+let heartbeat = null, lastPing = null, lastPingOk = null;
+const HEARTBEAT_MS = Number(process.env.PCC_HEARTBEAT_MS) || 4 * 60 * 1000; // every 4 min
+function startHeartbeat() {
+  stopHeartbeat();
+  heartbeat = setInterval(async () => {
+    try { await keepAlivePing(); lastPing = Date.now(); lastPingOk = true; }
+    catch (e) { lastPing = Date.now(); lastPingOk = false; stopHeartbeat(); console.log("[pcc] keep-alive stopped — session ended:", e.message); }
+  }, HEARTBEAT_MS);
+  if (heartbeat.unref) heartbeat.unref();
+  console.log(`[pcc] keep-alive started (every ${Math.round(HEARTBEAT_MS / 60000)} min)`);
+}
+function stopHeartbeat() { if (heartbeat) { clearInterval(heartbeat); heartbeat = null; } }
+
 app.post("/connect", async (req, res) => {
   try {
     const cookie = normalizeCookie(req.body?.cookie);
@@ -25,15 +39,16 @@ app.post("/connect", async (req, res) => {
     const base = (req.body?.base || "").trim() || undefined;
     setRuntimeCredentials({ cookie, base });
     const v = await validateSession();
+    startHeartbeat();
     res.json({ ok: true, who: v.who });
   } catch (e) {
-    clearSession();
+    clearSession(); stopHeartbeat();
     res.status(e.status && e.status < 500 ? 200 : 502).json({ ok: false, error: e.message });
   }
 });
 
-app.post("/disconnect", (_req, res) => { clearSession(); res.json({ ok: true }); });
-app.get("/status", (_req, res) => res.json({ connected: hasRuntimeCredentials() }));
+app.post("/disconnect", (_req, res) => { clearSession(); stopHeartbeat(); res.json({ ok: true }); });
+app.get("/status", (_req, res) => res.json({ connected: hasRuntimeCredentials(), keepAlive: !!heartbeat, lastPing, lastPingOk }));
 
 // status query: "O" Open (default, fast), "" All, "E" Exported, "A" Accepted, "N" Do Not Submit.
 app.get("/claims", async (req, res) => {
