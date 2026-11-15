@@ -91,6 +91,32 @@ export async function validateSession() {
   return { ok: true, who: m ? m[1].trim() : null };
 }
 
+// The facilities this login can see: [{ id, name }]. Parsed from PCC's facility list.
+export async function getFacilities() {
+  const html = await pccGet("/tools/faclist.jsp?facilityList=true&allowEMCModeCheck=false");
+  const out = [], seen = new Set();
+  const re = /switchToFacilityView\((\d+)\)[^>]*>([^<]+)/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    const id = m[1], name = m[2].replace(/\s+/g, " ").trim();
+    if (seen.has(id) || !name) continue;
+    seen.add(id);
+    out.push({ id, name });
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Switch the session's active facility. NOTE: this mutates the shared session, so the same
+// facility change is seen by any browser using this cookie.
+export async function switchFacility(id) {
+  if (!/^\d+$/.test(String(id))) throw new PccError("Invalid facility id.", { status: 400 });
+  const { base } = getSession();
+  const prev = encodeURIComponent(base.replace(/\/$/, "") + "/home/home.jsp?ESOLnewlogin=N");
+  const text = await pccGet(`/common/facilityswitchajaxcontroller.xhtml?newFacilityID=${id}&oldTabType=P&facType=USAR&previousURL=${prev}`);
+  try { const j = JSON.parse(text); if (j && j.success === false) throw new PccError("PCC refused the facility switch.", { status: 502 }); } catch { /* non-JSON is fine */ }
+  return true;
+}
+
 // Keep-alive: a cheap authenticated GET that resets PCC's idle timer. Throws on auth failure
 // (so the caller can stop the heartbeat when the session has truly died).
 export async function keepAlivePing() {

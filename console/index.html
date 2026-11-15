@@ -155,6 +155,7 @@
   </div>
   <div class="toolbar">
     <input type="search" id="search" placeholder="Search…" />
+    <select id="facilityFilter" title="Facility"><option value="">All facilities…</option></select>
     <select id="statusFilter" title="Which PCC batch status to load">
       <option value="">All statuses</option>
       <option value="O">Open (faster)</option>
@@ -320,6 +321,36 @@
   const saveCookie=(v,b)=>{try{localStorage.setItem(LS,v);localStorage.setItem(LSB,b)}catch(e){}};
   const prefill=()=>{try{$("#cCookie").value=localStorage.getItem(LS)||"";const b=localStorage.getItem(LSB);if(b)$("#cBase").value=b}catch(e){}};
 
+  // ---- facilities ----
+  async function loadFacilities(currentName){
+    try{
+      const r=await fetch("/facilities");const j=await r.json();
+      if(!r.ok||!j.ok)return;
+      const facs=j.facilities||[];
+      const sel=$("#facilityFilter");
+      sel.innerHTML=facs.map(f=>`<option value="${esc(f.id)}">${esc(f.name)}</option>`).join("");
+      // select the facility that matches the one we're connected to
+      if(currentName){
+        const norm=(s)=>String(s||"").toLowerCase().replace(/\s*-\s*\d+$/,"").trim();
+        const match=facs.find(f=>norm(f.name)===norm(currentName)||norm(f.name).startsWith(norm(currentName)));
+        if(match)sel.value=match.id;
+      }
+    }catch(e){/* leave as-is */}
+  }
+  $("#facilityFilter").addEventListener("change",async(e)=>{
+    const id=e.target.value; if(!id)return;
+    badge("Switching facility…");$("#facilityFilter").disabled=true;
+    try{
+      const r=await fetch("/facility",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id})});
+      const j=await r.json();
+      if(!r.ok||!j.ok)throw new Error(j.error||"Could not switch facility");
+      if(j.who){$("#whoName").textContent=j.who;$("#whoName").hidden=false}
+      allClaims=null;
+      if(ui.view==="all")loadAllClaims();else loadClaims();
+    }catch(err){badge("Could not switch facility — "+err.message,"bad")}
+    finally{$("#facilityFilter").disabled=false}
+  });
+
   async function loadClaims(){
     showDash();badge(`Loading ${statusLabel(ui.statusCode)}…`);
     try{
@@ -337,7 +368,7 @@
     try{
       const r=await fetch("/connect",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({cookie,base})});
       const j=await r.json();
-      if(j.ok){saveCookie(cookie,base);if(j.who){$("#whoName").textContent=j.who;$("#whoName").hidden=false}gmsg("");loadClaims()}
+      if(j.ok){saveCookie(cookie,base);if(j.who){$("#whoName").textContent=j.who;$("#whoName").hidden=false}gmsg("");loadClaims();loadFacilities(j.who)}
       else gmsg(j.error||"Could not connect — check the cookie and try again.","bad");
     }catch(e){gmsg("No API server reachable. This connects only when the app runs (npm start).","bad")}
     finally{$("#cGo").disabled=false}
@@ -356,7 +387,7 @@
 
   async function init(){
     prefill();
-    try{const r=await fetch("/status");if(r.ok&&(await r.json()).connected)return loadClaims()}catch(e){}
+    try{const r=await fetch("/status");if(r.ok&&(await r.json()).connected){loadClaims();loadFacilities();return}}catch(e){}
     showGate();
   }
   init();

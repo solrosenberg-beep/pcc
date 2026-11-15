@@ -5,7 +5,7 @@ import express from "express";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { setRuntimeCredentials, clearSession, hasRuntimeCredentials } from "./session.mjs";
-import { validateSession, getClaims, getBatchInvoices, getAllClaims, keepAlivePing, PccError } from "./pcc.mjs";
+import { validateSession, getClaims, getBatchInvoices, getAllClaims, getFacilities, switchFacility, keepAlivePing, PccError } from "./pcc.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -56,6 +56,23 @@ app.get("/claims", async (req, res) => {
     const status = req.query.status ?? "O";
     const claims = await getClaims({ statuses: [status] });
     res.json({ ok: true, claims });
+  } catch (e) {
+    res.status(e instanceof PccError && e.status ? e.status : 502).json({ ok: false, error: e.message });
+  }
+});
+
+// List facilities this login can see.
+app.get("/facilities", async (_req, res) => {
+  try { res.json({ ok: true, facilities: await getFacilities() }); }
+  catch (e) { res.status(e instanceof PccError && e.status ? e.status : 502).json({ ok: false, error: e.message }); }
+});
+
+// Switch the active facility, then report the new current facility name.
+app.post("/facility", async (req, res) => {
+  try {
+    await switchFacility(req.body?.id);
+    const v = await validateSession();
+    res.json({ ok: true, who: v.who });
   } catch (e) {
     res.status(e instanceof PccError && e.status ? e.status : 502).json({ ok: false, error: e.message });
   }
