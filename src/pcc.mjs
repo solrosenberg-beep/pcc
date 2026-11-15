@@ -113,7 +113,10 @@ export async function switchFacility(id) {
   const { base } = getSession();
   const prev = encodeURIComponent(base.replace(/\/$/, "") + "/home/home.jsp?ESOLnewlogin=N");
   const text = await pccGet(`/common/facilityswitchajaxcontroller.xhtml?newFacilityID=${id}&oldTabType=P&facType=USAR&previousURL=${prev}`);
-  try { const j = JSON.parse(text); if (j && j.success === false) throw new PccError("PCC refused the facility switch.", { status: 502 }); } catch { /* non-JSON is fine */ }
+  let newURL;
+  try { const j = JSON.parse(text); if (j && j.success === false) throw new PccError("PCC refused the facility switch.", { status: 502 }); newURL = j && j.newURL; } catch { /* non-JSON is fine */ }
+  // Complete the switch the way the browser does — load the landing page it returns.
+  try { await pccGet(newURL || "/home/home.jsp?ESOLnewlogin=N"); } catch { /* best effort */ }
   return true;
 }
 
