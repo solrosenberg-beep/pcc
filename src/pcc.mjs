@@ -84,10 +84,11 @@ async function pccGet(path) {
   return text;
 }
 
-// Confirm the pasted session works by loading the (authenticated) claims list page.
+// Confirm the pasted session works, and read the current facility name from the page.
 export async function validateSession() {
-  await pccGet("/admin/billing/ub04batchlist.jsp?ESOLrow=1&ESOLview=default&ESOLstatus=O&ESOLsubmitterfilterid=-1");
-  return { ok: true, who: null };
+  const html = await pccGet("/admin/billing/ub04batchlist.jsp?ESOLrow=1&ESOLview=default&ESOLstatus=O&ESOLsubmitterfilterid=-1");
+  const m = html.match(/facilityName:\s*[`"']([^`"']+)[`"']/i);
+  return { ok: true, who: m ? m[1].trim() : null };
 }
 
 // Keep-alive: a cheap authenticated GET that resets PCC's idle timer. Throws on auth failure
