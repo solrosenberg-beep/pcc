@@ -170,6 +170,8 @@
     <button id="reloadBtn">Reload</button>
     <button class="accent" id="uploadBtn">Upload 837</button>
     <input type="file" id="file837" accept=".837,.txt,.edi,.dat,text/plain" hidden />
+    <button id="remitBtn">Upload 835</button>
+    <input type="file" id="file835" accept=".835,.txt,.edi,.dat,.era,.rmt,text/plain" hidden />
     <button id="disconnectBtn">Disconnect</button>
   </div>
   <div class="tablewrap" id="panel-batches">
@@ -195,7 +197,7 @@
   <div class="dbody">
     <div class="tablewrap" style="box-shadow:none">
       <table>
-        <thead><tr><th>Resident</th><th>Payer</th><th class="hide">Type</th><th>Bill Type</th><th class="hide">From</th><th class="hide">To</th><th class="num">Amount</th></tr></thead>
+        <thead id="dThead"></thead>
         <tbody id="dRows"></tbody>
       </table>
     </div>
@@ -256,8 +258,14 @@
     if(v==="all")renderAll();else renderRows();
   }
 
+  // ---- drawer header templates ----
+  const CLAIMS_HEAD=`<tr><th>Resident</th><th>Payer</th><th>Type</th><th>Bill Type</th><th>From</th><th>To</th><th class="num">Amount</th></tr>`;
+  const REMIT_HEAD=`<tr><th>Claim</th><th>Patient</th><th>Status</th><th class="num">Billed</th><th class="num">Paid</th><th class="num">Pt Resp</th><th>Adjustments / denial codes</th></tr>`;
+  const setDrawerHead=(h)=>{$("#dThead").innerHTML=h};
+
   // ---- batch drill-down drawer ----
   async function openBatch(batchId,desc,payer){
+    setDrawerHead(CLAIMS_HEAD);
     $("#dTitle").textContent="Batch "+batchId;
     $("#dSub").textContent=[desc,payer].filter(Boolean).join(" · ");
     $("#dRows").innerHTML=`<tr><td colspan="7"><div class="empty">Loading claims…</div></td></tr>`;
@@ -297,6 +305,7 @@
     return claims;
   }
   function showUpload(name,cl){
+    setDrawerHead(CLAIMS_HEAD);
     $("#dTitle").textContent="Uploaded 837 — preview";
     $("#dSub").textContent=`${esc(name)} · ${cl.length} claim${cl.length===1?"":"s"} · not submitted to PCC`;
     $("#dRows").innerHTML=cl.length?cl.map(c=>`<tr>
@@ -310,6 +319,48 @@
     const f=e.target.files[0]; if(!f)return;
     try{ const text=await f.text(); showUpload(f.name,parse837(text)); }
     catch(err){ showUpload(f.name,[]); }
+    e.target.value="";
+  });
+
+  // ---- Upload 835 (remittance / ERA — read-only, parsed in the browser) ----
+  const CLP_STATUS={ "1":"Paid (primary)","2":"Paid (secondary)","3":"Paid (tertiary)","4":"Denied","5":"Paid, forwarded","19":"Paid, forwarded","20":"Secondary, forwarded","21":"Tertiary, forwarded","22":"Reversal","23":"Not our claim","25":"Predetermination" };
+  // Common CARC (claim adjustment reason) codes in plain English — the rest show by code.
+  const CARC={ "1":"Deductible","2":"Coinsurance","3":"Copay","4":"Inconsistent modifier","16":"Missing info / submission error","18":"Duplicate claim","22":"Covered by another payer","23":"Prior payer adjustment","24":"Covered by capitation/managed care","26":"Expenses before coverage","27":"Expenses after coverage ended","29":"Time limit for filing expired","45":"Charge exceeds fee schedule","49":"Routine/non-covered exam","50":"Not medically necessary","55":"Experimental/investigational","58":"Treatment by wrong provider","96":"Non-covered charge","97":"Bundled/included in another service","109":"Not covered by this payer/contractor","119":"Benefit maximum reached","197":"Precert/authorization absent","204":"Not covered under plan","B7":"Provider not certified for service" };
+  const CAS_GROUP={ CO:"Contractual", PR:"Patient resp", OA:"Other", PI:"Payer-initiated", CR:"Correction/reversal" };
+  function parse835(text){
+    const segs=text.replace(/\r?\n/g,"").split("~").map(s=>s.trim()).filter(Boolean);
+    const header={payer:"",check:"",paid:0,date:""}; const claims=[]; let cur=null;
+    for(const seg of segs){
+      const el=seg.split("*"); const tag=(el[0]||"").toUpperCase();
+      if(tag==="BPR") header.paid=parseFloat(el[2])||0;
+      else if(tag==="TRN") header.check=el[2]||"";
+      else if(tag==="N1"){ if(el[1]==="PR")header.payer=el[2]||""; }
+      else if(tag==="DTM"&&!header.date) header.date=fmtDate(el[2]||"");
+      else if(tag==="CLP"){ cur={ id:el[1]||"", status:CLP_STATUS[el[2]]||("Status "+(el[2]||"?")), billed:parseFloat(el[3])||0, paid:parseFloat(el[4])||0, patientResp:parseFloat(el[5])||0, payerControl:el[7]||"", patient:"", adj:[], remarks:[] }; claims.push(cur); }
+      else if(tag==="NM1"&&cur&&el[1]==="QC") cur.patient=(el[3]||"")+(el[4]?", "+el[4]:"");
+      else if(tag==="CAS"&&cur){ const g=el[1]; for(let k=2;k+1<el.length;k+=3){ const code=el[k]; if(!code)continue; cur.adj.push({group:g,code,amount:parseFloat(el[k+1])||0,label:CARC[code]||""}); } }
+      else if(tag==="LQ"&&cur&&el[2]) cur.remarks.push(el[2]);
+    }
+    return {header,claims};
+  }
+  function showRemit(name,data){
+    setDrawerHead(REMIT_HEAD);
+    const h=data.header, n=data.claims.length, denied=data.claims.filter(c=>/denied/i.test(c.status)).length;
+    $("#dTitle").textContent="Remittance (835) — preview";
+    $("#dSub").textContent=[name, h.payer&&("Payer: "+h.payer), h.check&&("EFT/Check: "+h.check), "Paid: "+money(h.paid), `${n} claim${n===1?"":"s"}`, denied?`${denied} denied`:null,"not submitted to PCC"].filter(Boolean).join(" · ");
+    $("#dRows").innerHTML=n?data.claims.map(c=>{
+      const codes=[...c.adj.map(a=>`${esc(a.code)}${a.label?" ("+esc(a.label)+")":""} ${money(a.amount)} [${esc(a.group)}]`), ...c.remarks.map(r=>"RARC "+esc(r))].join("; ");
+      const cls=/denied/i.test(c.status)?"bad":/paid/i.test(c.status)?"ok":"warn";
+      return `<tr><td class="cno">${esc(c.id)}</td><td>${esc(c.patient)}</td><td><span class="pill ${cls}">${esc(c.status)}</span></td>
+        <td class="num">${money(c.billed)}</td><td class="num">${money(c.paid)}</td><td class="num">${money(c.patientResp)}</td><td>${codes||"—"}</td></tr>`;
+    }).join(""):`<tr><td colspan="7"><div class="empty">No claim payments found. Expected an X12 835 remittance with CLP segments.</div></td></tr>`;
+    $("#scrim").classList.add("open");$("#drawer").classList.add("open");
+  }
+  $("#remitBtn").addEventListener("click",()=>$("#file835").click());
+  $("#file835").addEventListener("change",async(e)=>{
+    const f=e.target.files[0]; if(!f)return;
+    try{ const text=await f.text(); showRemit(f.name,parse835(text)); }
+    catch(err){ showRemit(f.name,{header:{},claims:[]}); }
     e.target.value="";
   });
   function render(){renderTiles();renderRows()}
