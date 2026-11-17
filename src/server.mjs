@@ -5,7 +5,7 @@ import express from "express";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { setRuntimeCredentials, clearSession, hasRuntimeCredentials } from "./session.mjs";
-import { validateSession, getClaims, getBatchInvoices, getAllClaims, getFacilities, switchFacility, keepAlivePing, PccError } from "./pcc.mjs";
+import { validateSession, getClaims, getClaimsChunk, getBatchInvoices, getAllClaims, getFacilities, switchFacility, keepAlivePing, PccError } from "./pcc.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -51,11 +51,14 @@ app.post("/disconnect", (_req, res) => { clearSession(); stopHeartbeat(); res.js
 app.get("/status", (_req, res) => res.json({ connected: hasRuntimeCredentials(), keepAlive: !!heartbeat, lastPing, lastPingOk }));
 
 // status query: "O" Open (default, fast), "" All, "E" Exported, "A" Accepted, "N" Do Not Submit.
+// Chunked: start + pages let the client stream the list so a request never times out.
 app.get("/claims", async (req, res) => {
   try {
     const status = req.query.status ?? "O";
-    const claims = await getClaims({ statuses: [status] });
-    res.json({ ok: true, claims });
+    const start = Math.max(1, parseInt(req.query.start, 10) || 1);
+    const pages = Math.min(10, Math.max(1, parseInt(req.query.pages, 10) || 6));
+    const { batches, nextStart } = await getClaimsChunk(status, start, pages);
+    res.json({ ok: true, claims: batches, nextStart });
   } catch (e) {
     res.status(e instanceof PccError && e.status ? e.status : 502).json({ ok: false, error: e.message });
   }

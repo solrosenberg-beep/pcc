@@ -127,6 +127,28 @@ export async function keepAlivePing() {
   return true;
 }
 
+// Shape a parsed batch row for the console.
+function shapeBatch(b) {
+  return { id: b.number, batchId: b.batchId, description: b.description, payer: b.payer, dos: b.date, claims: b.claims, amount: b.amount, status: b.status, revisedBy: b.revisedBy };
+}
+
+// Fetch ONE chunk of the batch list (a few pages, concurrently). Keeps each request fast so
+// the hosting gateway never times out; the client calls this repeatedly until nextStart is null.
+export async function getClaimsChunk(status = "O", startRow = 1, pages = 6) {
+  const pageUrl = (row) => `/admin/billing/ub04batchlist.jsp?ESOLrow=${row}&ESOLview=default&ESOLstatus=${encodeURIComponent(status)}&ESOLsubmitterfilterid=-1`;
+  const reqs = [];
+  for (let k = 0; k < pages; k++) reqs.push(pccGet(pageUrl(startRow + k * 20)).then(parseBatches).catch(() => null));
+  const results = await Promise.all(reqs);
+  const batches = [];
+  let reachedEnd = false;
+  for (const b of results) {
+    if (b == null) continue;
+    batches.push(...b);
+    if (b.length < 20) reachedEnd = true;
+  }
+  return { batches: batches.map(shapeBatch), nextStart: reachedEnd ? null : startRow + pages * 20 };
+}
+
 // Parse one ub04batchinvoices.jsp page into individual claim rows.
 export function parseInvoices(html) {
   const out = [];

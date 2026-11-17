@@ -245,7 +245,7 @@
   }
   async function loadAllClaims(){
     allClaims=null;renderAll();
-    try{const r=await fetch("/all-claims?status="+encodeURIComponent(ui.statusCode));const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Could not load claims");allClaims=j.claims||[];renderAll();}
+    try{const r=await fetch("/all-claims?status="+encodeURIComponent(ui.statusCode));const j=await safeJson(r);if(!r.ok||!j.ok)throw new Error(j.error||"Could not load claims");allClaims=j.claims||[];renderAll();}
     catch(e){allClaims=[];$("#allRows").innerHTML=`<tr><td colspan="7"><div class="empty">Could not load claims — ${esc(e.message)}</div></td></tr>`;}
   }
   function switchView(v){
@@ -406,13 +406,36 @@
     finally{$("#facilityFilter").disabled=false}
   });
 
+  // Parse a response as JSON, but turn a gateway timeout (plain "upstream request timeout" text)
+  // into a readable error instead of a cryptic JSON parse failure.
+  async function safeJson(r){
+    const t=await r.text();
+    try{ return JSON.parse(t); }
+    catch{ throw new Error(r.status>=500||/timeout|upstream/i.test(t)?"the server timed out — try a single status like Open":("unexpected response ("+r.status+")")); }
+  }
+  let loadGen=0;
   async function loadClaims(){
-    showDash();badge(`Loading ${statusLabel(ui.statusCode)}…`);
+    const gen=++loadGen;
+    showDash();claims=[];render();badge(`Loading ${statusLabel(ui.statusCode)}…`);
+    const seen=new Set(); let start=1, guard=0;
     try{
-      const r=await fetch("/claims?status="+encodeURIComponent(ui.statusCode));const j=await r.json();
-      if(!r.ok||!j.ok)throw new Error(j.error||"Could not load claims");
-      claims=j.claims||[];badge(`Live — PointClickCare`,"ok");render();
-    }catch(e){showGate("Could not load claims — "+e.message,"bad")}
+      while(start && guard++<500){
+        const r=await fetch(`/claims?status=${encodeURIComponent(ui.statusCode)}&start=${start}&pages=6`);
+        const j=await safeJson(r);
+        if(gen!==loadGen)return; // a newer load (facility/status change) superseded this one
+        if(!r.ok||!j.ok)throw new Error(j.error||"Could not load claims");
+        for(const c of (j.claims||[])){ if(c.batchId&&!seen.has(c.batchId)){ seen.add(c.batchId); claims.push(c); } }
+        render();
+        start=j.nextStart;
+        if(start)badge(`Loading ${statusLabel(ui.statusCode)}… ${claims.length} so far`);
+      }
+      if(gen!==loadGen)return;
+      badge(`Live — PointClickCare`,"ok");render();
+    }catch(e){
+      if(gen!==loadGen)return;
+      if(claims.length){ render(); badge("Loaded "+claims.length+" — then stopped: "+e.message,"bad"); }
+      else showGate("Could not load claims — "+e.message,"bad");
+    }
   }
 
   async function doConnect(){
