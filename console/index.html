@@ -397,11 +397,12 @@
     badge("Switching facility…");$("#facilityFilter").disabled=true;
     try{
       const r=await fetch("/facility",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id})});
-      const j=await r.json();
+      const j=await safeJson(r);
       if(!r.ok||!j.ok)throw new Error(j.error||"Could not switch facility");
       if(j.who){$("#whoName").textContent=j.who;$("#whoName").hidden=false}
-      allClaims=null;
-      if(ui.view==="all")loadAllClaims();else loadClaims();
+      // Switching facility loads Open (fast) so hopping is snappy; pick "All statuses" for full history.
+      ui.statusCode="O"; $("#statusFilter").value="O"; allClaims=null;
+      loadClaims();
     }catch(err){badge("Could not switch facility — "+err.message,"bad")}
     finally{$("#facilityFilter").disabled=false}
   });
